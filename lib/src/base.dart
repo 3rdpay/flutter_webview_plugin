@@ -31,6 +31,11 @@ class FlutterWebviewPlugin {
   final _onScrollYChanged = StreamController<double>.broadcast();
   final _onProgressChanged = new StreamController<double>.broadcast();
   final _onHttpError = StreamController<WebViewHttpError>.broadcast();
+  final _onTapQQ = StreamController<Null>.broadcast();
+  final _onTapCustomService = StreamController<Null>.broadcast();
+  final _onTapWeChat = StreamController<Null>.broadcast();
+  final _onWebAlipay = StreamController<String>.broadcast();
+  final _onWebQQ = StreamController<String>.broadcast();
 
   Future<Null> _handleMessages(MethodCall call) async {
     switch (call.method) {
@@ -62,8 +67,35 @@ class FlutterWebviewPlugin {
       case 'onHttpError':
         _onHttpError.add(WebViewHttpError(call.arguments['code'], call.arguments['url']));
         break;
+      case 'tapQQ':
+        _onTapQQ.add(null);
+        break;
+      case 'tapCustomService':
+        _onTapCustomService.add(null);
+        break;
+      case 'tapWeChat':
+        _onTapWeChat.add(null);
+        break;
+      case 'openWebQQ':
+        _onWebQQ.add(call.arguments['uin']);
+        break;
+      case 'openWebAlipay':
+        _onWebAlipay.add(call.arguments['url']);
+        break;
     }
   }
+
+  Stream<String> get onWebAlipay => _onWebAlipay.stream;
+  Stream<String> get onWebQQ => _onWebQQ.stream;
+
+  /// Listening the OnDestroy LifeCycle Event for Android
+  Stream<Null> get onTapQQ => _onTapQQ.stream;
+
+  /// Listening the OnDestroy LifeCycle Event for Android
+  Stream<Null> get onTapCustomService => _onTapCustomService.stream;
+
+  /// Listening the OnDestroy LifeCycle Event for Android
+  Stream<Null> get onTapWeChat => _onTapWeChat.stream;
 
   /// Listening the OnDestroy LifeCycle Event for Android
   Stream<Null> get onDestroy => _onDestroy.stream;
@@ -130,6 +162,10 @@ class FlutterWebviewPlugin {
     bool useWideViewPort,
     String invalidUrlRegex,
     bool geolocationEnabled,
+    bool qqEnabled,
+    bool customServiceEnabled,
+    bool weChatEnabled,
+    String weChatId,
   }) async {
     final args = <String, dynamic>{
       'url': url,
@@ -149,6 +185,10 @@ class FlutterWebviewPlugin {
       'useWideViewPort': useWideViewPort ?? false,
       'invalidUrlRegex': invalidUrlRegex,
       'geolocationEnabled': geolocationEnabled ?? false,
+      'qq': qqEnabled ?? false,
+      'customService': customServiceEnabled ?? false,
+      'weChat': weChatEnabled ?? false,
+      'weChatId': weChatId ?? "",
     };
 
     if (headers != null) {

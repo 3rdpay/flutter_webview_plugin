@@ -8,6 +8,12 @@ import 'base.dart';
 
 class WebviewScaffold extends StatefulWidget {
 
+  final VoidCallback onTapQQ;
+  final VoidCallback onTapCustomService;
+  final VoidCallback onTapWeChat;
+  final void Function(String uin) onWebQQ;
+  final void Function(String url) onWebAlipay;
+
   const WebviewScaffold({
     Key key,
     this.appBar,
@@ -32,7 +38,16 @@ class WebviewScaffold extends StatefulWidget {
     this.allowFileURLs,
     this.resizeToAvoidBottomInset = false,
     this.invalidUrlRegex,
-    this.geolocationEnabled
+    this.geolocationEnabled,
+    this.onTapQQ,
+    this.onTapCustomService,
+    this.onTapWeChat,
+    this.qq,
+    this.customService,
+    this.weChat,
+    this.onWebQQ,
+    this.onWebAlipay,
+    this.weChatId,
   }) : super(key: key);
 
   final PreferredSizeWidget appBar;
@@ -58,6 +73,10 @@ class WebviewScaffold extends StatefulWidget {
   final bool resizeToAvoidBottomInset;
   final String invalidUrlRegex;
   final bool geolocationEnabled;
+  final bool qq;
+  final bool customService;
+  final bool weChat;
+  final String weChatId;
 
   @override
   _WebviewScaffoldState createState() => _WebviewScaffoldState();
@@ -68,6 +87,11 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
   Rect _rect;
   Timer _resizeTimer;
   StreamSubscription<WebViewStateChanged> _onStateChanged;
+  StreamSubscription<Null> _onTapQQ;
+  StreamSubscription<Null> _onTapCustomService;
+  StreamSubscription<Null> _onTapWeChat;
+  StreamSubscription<String> _onWebQQ;
+  StreamSubscription<String> _onWebAlipay;
 
   var _onBack;
 
@@ -95,11 +119,36 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
     if (widget.hidden) {
       _onStateChanged =
           webviewReference.onStateChanged.listen((WebViewStateChanged state) {
-        if (state.type == WebViewState.finishLoad) {
-          webviewReference.show();
-        }
-      });
+            if (state.type == WebViewState.finishLoad) {
+              webviewReference.show();
+            }
+          });
     }
+
+    _onTapQQ = webviewReference.onTapQQ.listen((_) {
+      if (widget.onTapQQ != null)
+        widget.onTapQQ();
+    });
+
+    _onTapCustomService = webviewReference.onTapCustomService.listen((_) {
+      if (widget.onTapCustomService != null)
+        widget.onTapCustomService();
+    });
+
+    _onTapWeChat = webviewReference.onTapWeChat.listen((_) {
+      if (widget.onTapWeChat != null)
+        widget.onTapWeChat();
+    });
+
+    _onWebAlipay = webviewReference.onWebAlipay.listen((url) {
+      if (widget.onWebAlipay != null)
+        widget.onWebAlipay(url);
+    });
+
+    _onWebQQ = webviewReference.onWebQQ.listen((uin) {
+      if (widget.onWebQQ != null)
+        widget.onWebQQ(uin);
+    });
   }
 
   /// Equivalent to [Navigator.of(context)._history.last].
@@ -121,6 +170,11 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
     if (widget.hidden) {
       _onStateChanged.cancel();
     }
+    _onTapQQ?.cancel();
+    _onTapCustomService?.cancel();
+    _onTapWeChat?.cancel();
+    _onWebQQ?.cancel();
+    _onWebAlipay?.cancel();
     webviewReference.dispose();
   }
 
@@ -153,7 +207,11 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
               appCacheEnabled: widget.appCacheEnabled,
               allowFileURLs: widget.allowFileURLs,
               invalidUrlRegex: widget.invalidUrlRegex,
-              geolocationEnabled: widget.geolocationEnabled
+              geolocationEnabled: widget.geolocationEnabled,
+              qqEnabled: widget.qq,
+              customServiceEnabled: widget.customService,
+              weChatEnabled: widget.weChat,
+              weChatId: widget.weChatId,
             );
           } else {
             if (_rect != value) {
@@ -166,7 +224,8 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
             }
           }
         },
-        child: widget.initialChild ?? const Center(child: const CircularProgressIndicator()),
+        child: widget.initialChild ??
+            const Center(child: const CircularProgressIndicator()),
       ),
     );
   }
@@ -189,7 +248,8 @@ class _WebviewPlaceholder extends SingleChildRenderObjectWidget {
   }
 
   @override
-  void updateRenderObject(BuildContext context, _WebviewPlaceholderRender renderObject) {
+  void updateRenderObject(BuildContext context,
+      _WebviewPlaceholderRender renderObject) {
     renderObject..onRectChanged = onRectChanged;
   }
 }
@@ -198,7 +258,8 @@ class _WebviewPlaceholderRender extends RenderProxyBox {
   _WebviewPlaceholderRender({
     RenderBox child,
     ValueChanged<Rect> onRectChanged,
-  })  : _callback = onRectChanged,
+  })
+      : _callback = onRectChanged,
         super(child);
 
   ValueChanged<Rect> _callback;

@@ -31,6 +31,8 @@ allprojects {
 }
 
 apply plugin: 'com.android.library'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlin-android-extensions'
 
 android {
     compileSdkVersion 28
@@ -44,7 +46,18 @@ android {
     lintOptions {
         disable 'InvalidPackage'
     }
+    compileOptions {
+        sourceCompatibility = '1.8'
+        targetCompatibility = '1.8'
+    }
 }
 dependencies {
     implementation group: 'androidx.appcompat', name: 'appcompat', version: '1.0.0'
+    compile "androidx.core:core-ktx:+"
+    implementation 'org.mgwater.mgbase:mg-dialog-kt:0.0.9'
+    implementation 'org.mgwater.mgbase:mg-views-kt:0.1.7'
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlin_version"
+}
+repositories {
+    mavenCentral()
 }

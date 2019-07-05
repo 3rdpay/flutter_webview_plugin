@@ -5,11 +5,21 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Point;
+import android.util.Log;
 import android.view.Display;
+import android.view.LayoutInflater;
+import android.view.View;
 import android.widget.FrameLayout;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
 import android.os.Build;
+
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGBaseDialog;
+import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogButton;
+import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogResultDelegateInUtils;
+import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogUtils;
 
 import java.util.Map;
 
@@ -30,7 +40,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
 
     public static void registerWith(PluginRegistry.Registrar registrar) {
         channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
-        final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(),registrar.activeContext());
+        final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(), registrar.activeContext());
         registrar.addActivityResultListener(instance);
         channel.setMethodCallHandler(instance);
     }
@@ -102,14 +112,53 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         boolean useWideViewPort = call.argument("useWideViewPort");
         String invalidUrlRegex = call.argument("invalidUrlRegex");
         boolean geolocationEnabled = call.argument("geolocationEnabled");
+        boolean qqEnabled = call.argument("qq");
+        boolean customServiceEnabled = call.argument("customService");
+        boolean weChatEnabled = call.argument("weChat");
+        String weChatId = call.argument("weChatId");
+
 
         if (webViewManager == null || webViewManager.closed == true) {
-            webViewManager = new WebviewManager(activity, context);
+            webViewManager = new WebviewManager(activity, context, qqEnabled, weChatEnabled, customServiceEnabled);
+
+            webViewManager.setOnButtonClickListener((v, index) -> {
+                if (index == 0 && qqEnabled) {
+                    channel.invokeMethod("tapQQ", null);
+                } else if (index == 1 && customServiceEnabled) {
+                    channel.invokeMethod("tapCustomService", null);
+                } else if (index == 2 && weChatEnabled) {
+
+                    View dialogView = new WeChatDialog(activity, new MGDialogResultDelegateInUtils() {
+                        @Override
+                        public void outsideCancel(@NotNull MGBaseDialog mgBaseDialog, int i) {
+
+                        }
+
+                        @Override
+                        public boolean dialogResult(@NotNull View view, @NotNull MGDialogButton mgDialogButton, @Nullable Object o) {
+                            return true;
+                        }
+                    });
+                    ((WeChatDialog) dialogView).setWeChatId(weChatId);
+                    // 先彈出 wechat dialog
+                    MGDialogUtils.DialogAttr dialogAttr = new MGDialogUtils.DialogAttr(dialogView,
+                            null, null, 0, true, null,
+                            (button, data) -> {
+                                if (button == MGDialogButton.RIGHT) {
+                                    channel.invokeMethod("tapWeChat", null);
+                                }
+                                return true;
+                            });
+                    MGDialogUtils.Companion.showDialog(activity, dialogAttr);
+                }
+            });
         }
 
         FrameLayout.LayoutParams params = buildLayoutParams(call);
 
-        activity.addContentView(webViewManager.webView, params);
+        activity.addContentView(webViewManager.containerLayout, params);
+
+        webViewManager.resize(params);
 
         webViewManager.openUrl(withJavascript,
                 clearCache,
@@ -137,7 +186,8 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         if (rc != null) {
             params = new FrameLayout.LayoutParams(
                     dp2px(activity, rc.get("width").intValue()), dp2px(activity, rc.get("height").intValue()));
-            params.setMargins(dp2px(activity, rc.get("left").intValue()), dp2px(activity, rc.get("top").intValue()),
+            int topMargin = dp2px(activity, rc.get("top").intValue());
+            params.setMargins(dp2px(activity, rc.get("left").intValue()), topMargin,
                     0, 0);
         } else {
             Display display = activity.getWindowManager().getDefaultDisplay();
