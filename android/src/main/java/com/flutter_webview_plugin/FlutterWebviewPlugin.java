@@ -5,22 +5,14 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Point;
-import android.util.Log;
 import android.view.Display;
-import android.view.LayoutInflater;
-import android.view.View;
 import android.widget.FrameLayout;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
 import android.os.Build;
 
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
-import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGBaseDialog;
-import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogButton;
-import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogResultDelegateInUtils;
-import org.magicalwater.mgkotlin.mgDialogKt.dialog.MGDialogUtils;
-
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import io.flutter.plugin.common.MethodCall;
@@ -37,6 +29,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     private Context context;
     static MethodChannel channel;
     private static final String CHANNEL_NAME = "flutter_webview_plugin";
+    private static final String JS_CHANNEL_NAMES_FIELD = "javascriptChannelNames";
 
     public static void registerWith(PluginRegistry.Registrar registrar) {
         channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
@@ -45,7 +38,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         channel.setMethodCallHandler(instance);
     }
 
-    private FlutterWebviewPlugin(Activity activity, Context context) {
+    FlutterWebviewPlugin(Activity activity, Context context) {
         this.activity = activity;
         this.context = context;
     }
@@ -95,7 +88,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         }
     }
 
-    private void openUrl(MethodCall call, MethodChannel.Result result) {
+     void openUrl(MethodCall call, MethodChannel.Result result) {
         boolean hidden = call.argument("hidden");
         String url = call.argument("url");
         String userAgent = call.argument("userAgent");
@@ -103,7 +96,9 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         boolean clearCache = call.argument("clearCache");
         boolean clearCookies = call.argument("clearCookies");
         boolean withZoom = call.argument("withZoom");
+        boolean displayZoomControls = call.argument("displayZoomControls");
         boolean withLocalStorage = call.argument("withLocalStorage");
+        boolean withOverviewMode = call.argument("withOverviewMode");
         boolean supportMultipleWindows = call.argument("supportMultipleWindows");
         boolean appCacheEnabled = call.argument("appCacheEnabled");
         Map<String, String> headers = call.argument("headers");
@@ -112,53 +107,20 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         boolean useWideViewPort = call.argument("useWideViewPort");
         String invalidUrlRegex = call.argument("invalidUrlRegex");
         boolean geolocationEnabled = call.argument("geolocationEnabled");
-        boolean qqEnabled = call.argument("qq");
-        boolean customServiceEnabled = call.argument("customService");
-        boolean weChatEnabled = call.argument("weChat");
-        String weChatId = call.argument("weChatId");
-
+        boolean debuggingEnabled = call.argument("debuggingEnabled");
 
         if (webViewManager == null || webViewManager.closed == true) {
-            webViewManager = new WebviewManager(activity, context, qqEnabled, weChatEnabled, customServiceEnabled);
-
-            webViewManager.setOnButtonClickListener((v, index) -> {
-                if (index == 0 && qqEnabled) {
-                    channel.invokeMethod("tapQQ", null);
-                } else if (index == 1 && customServiceEnabled) {
-                    channel.invokeMethod("tapCustomService", null);
-                } else if (index == 2 && weChatEnabled) {
-
-                    View dialogView = new WeChatDialog(activity, new MGDialogResultDelegateInUtils() {
-                        @Override
-                        public void outsideCancel(@NotNull MGBaseDialog mgBaseDialog, int i) {
-
-                        }
-
-                        @Override
-                        public boolean dialogResult(@NotNull View view, @NotNull MGDialogButton mgDialogButton, @Nullable Object o) {
-                            return true;
-                        }
-                    });
-                    ((WeChatDialog) dialogView).setWeChatId(weChatId);
-                    // 先彈出 wechat dialog
-                    MGDialogUtils.DialogAttr dialogAttr = new MGDialogUtils.DialogAttr(dialogView,
-                            null, null, 0, true, null,
-                            (button, data) -> {
-                                if (button == MGDialogButton.RIGHT) {
-                                    channel.invokeMethod("tapWeChat", null);
-                                }
-                                return true;
-                            });
-                    MGDialogUtils.Companion.showDialog(activity, dialogAttr);
-                }
-            });
+            Map<String, Object> arguments = (Map<String, Object>) call.arguments;
+            List<String> channelNames = new ArrayList();
+            if (arguments.containsKey(JS_CHANNEL_NAMES_FIELD)) {
+                channelNames = (List<String>) arguments.get(JS_CHANNEL_NAMES_FIELD);
+            }
+            webViewManager = new WebviewManager(activity, context, channelNames);
         }
 
         FrameLayout.LayoutParams params = buildLayoutParams(call);
 
-        activity.addContentView(webViewManager.containerLayout, params);
-
-        webViewManager.resize(params);
+        activity.addContentView(webViewManager.webView, params);
 
         webViewManager.openUrl(withJavascript,
                 clearCache,
@@ -168,14 +130,17 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
                 url,
                 headers,
                 withZoom,
+                displayZoomControls,
                 withLocalStorage,
+                withOverviewMode,
                 scrollBar,
                 supportMultipleWindows,
                 appCacheEnabled,
                 allowFileURLs,
                 useWideViewPort,
                 invalidUrlRegex,
-                geolocationEnabled
+                geolocationEnabled,
+                debuggingEnabled
         );
         result.success(null);
     }
@@ -186,8 +151,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         if (rc != null) {
             params = new FrameLayout.LayoutParams(
                     dp2px(activity, rc.get("width").intValue()), dp2px(activity, rc.get("height").intValue()));
-            int topMargin = dp2px(activity, rc.get("top").intValue());
-            params.setMargins(dp2px(activity, rc.get("left").intValue()), topMargin,
+            params.setMargins(dp2px(activity, rc.get("left").intValue()), dp2px(activity, rc.get("top").intValue()),
                     0, 0);
         } else {
             Display display = activity.getWindowManager().getDefaultDisplay();
@@ -208,7 +172,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         result.success(null);
     }
 
-    private void close(MethodCall call, MethodChannel.Result result) {
+    void close(MethodCall call, MethodChannel.Result result) {
         if (webViewManager != null) {
             webViewManager.close(call, result);
             webViewManager = null;
@@ -248,7 +212,13 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     private void reloadUrl(MethodCall call, MethodChannel.Result result) {
         if (webViewManager != null) {
             String url = call.argument("url");
-            webViewManager.reloadUrl(url);
+            Map<String, String> headers = call.argument("headers");
+            if (headers != null) {
+                webViewManager.reloadUrl(url, headers);
+            } else {
+                webViewManager.reloadUrl(url);
+            }
+
         }
         result.success(null);
     }

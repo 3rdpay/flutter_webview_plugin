@@ -1,3 +1,11 @@
+# fork 修改
+修正在 ios 上面 withZoom 參數表現失效
+
+
+---
+---
+---
+
 [![Flutter Community: flutter_webview_plugin](https://fluttercommunity.dev/_github/header/flutter_webview_plugin)](https://github.com/fluttercommunity/community)
 
 # Flutter WebView Plugin
@@ -9,6 +17,9 @@ Plugin that allows Flutter to communicate with a native WebView.
 **_Warning:_**
 The webview is not integrated in the widget tree, it is a native view on top of the flutter view.
 You won't be able see snackbars, dialogs, or other flutter widgets that would overlap with the region of the screen taken up by the webview.
+
+The getSafeAcceptedType() function is available only for minimum SDK of 21.
+eval() function only supports SDK of 19 or greater for evaluating Javascript.
 
 ## Getting Started
 
@@ -158,6 +169,10 @@ Future<String> loadJS(String name) async {
 }
 ```
 
+### Accessing local files in the file system
+Set the `withLocalUrl` option to true in the launch function or in the Webview scaffold to enable support for local URLs.
+
+Note that, on iOS, the `localUrlScope` option also needs to be set to a path to a directory. All files inside this folder (or subfolder) will be allowed access. If ommited, only the local file being opened will have access allowed, resulting in no subresources being loaded. This option is ignored on Android.
 
 ### Webview Events
 
@@ -186,10 +201,14 @@ Future<Null> launch(String url, {
    bool withZoom: false,
    bool withLocalStorage: true,
    bool withLocalUrl: true,
+   String localUrlScope: null,
    bool scrollBar: true,
    bool supportMultipleWindows: false,
    bool appCacheEnabled: false,
    bool allowFileURLs: false,
+   bool displayZoomControls: false,
+   bool useWideViewPort: false,
+   bool withOverviewMode: false,
 });
 ```
 

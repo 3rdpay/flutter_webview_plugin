@@ -3,22 +3,17 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter_webview_plugin/src/javascript_channel.dart';
 
 import 'base.dart';
 
 class WebviewScaffold extends StatefulWidget {
-
-  final VoidCallback onTapQQ;
-  final VoidCallback onTapCustomService;
-  final VoidCallback onTapWeChat;
-  final void Function(String uin) onWebQQ;
-  final void Function(String url) onWebAlipay;
-
   const WebviewScaffold({
     Key key,
     this.appBar,
     @required this.url,
     this.headers,
+    this.javascriptChannels,
     this.withJavascript,
     this.clearCache,
     this.clearCookies,
@@ -28,8 +23,12 @@ class WebviewScaffold extends StatefulWidget {
     this.persistentFooterButtons,
     this.bottomNavigationBar,
     this.withZoom,
+    this.displayZoomControls,
     this.withLocalStorage,
     this.withLocalUrl,
+    this.localUrlScope,
+    this.withOverviewMode,
+    this.useWideViewPort,
     this.scrollBar,
     this.supportMultipleWindows,
     this.appCacheEnabled,
@@ -39,20 +38,13 @@ class WebviewScaffold extends StatefulWidget {
     this.resizeToAvoidBottomInset = false,
     this.invalidUrlRegex,
     this.geolocationEnabled,
-    this.onTapQQ,
-    this.onTapCustomService,
-    this.onTapWeChat,
-    this.qq,
-    this.customService,
-    this.weChat,
-    this.onWebQQ,
-    this.onWebAlipay,
-    this.weChatId,
+    this.debuggingEnabled = false,
   }) : super(key: key);
 
   final PreferredSizeWidget appBar;
   final String url;
   final Map<String, String> headers;
+  final Set<JavascriptChannel> javascriptChannels;
   final bool withJavascript;
   final bool clearCache;
   final bool clearCookies;
@@ -62,8 +54,10 @@ class WebviewScaffold extends StatefulWidget {
   final List<Widget> persistentFooterButtons;
   final Widget bottomNavigationBar;
   final bool withZoom;
+  final bool displayZoomControls;
   final bool withLocalStorage;
   final bool withLocalUrl;
+  final String localUrlScope;
   final bool scrollBar;
   final bool supportMultipleWindows;
   final bool appCacheEnabled;
@@ -73,10 +67,9 @@ class WebviewScaffold extends StatefulWidget {
   final bool resizeToAvoidBottomInset;
   final String invalidUrlRegex;
   final bool geolocationEnabled;
-  final bool qq;
-  final bool customService;
-  final bool weChat;
-  final String weChatId;
+  final bool withOverviewMode;
+  final bool useWideViewPort;
+  final bool debuggingEnabled;
 
   @override
   _WebviewScaffoldState createState() => _WebviewScaffoldState();
@@ -87,11 +80,6 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
   Rect _rect;
   Timer _resizeTimer;
   StreamSubscription<WebViewStateChanged> _onStateChanged;
-  StreamSubscription<Null> _onTapQQ;
-  StreamSubscription<Null> _onTapCustomService;
-  StreamSubscription<Null> _onTapWeChat;
-  StreamSubscription<String> _onWebQQ;
-  StreamSubscription<String> _onWebAlipay;
 
   var _onBack;
 
@@ -101,7 +89,9 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
     webviewReference.close();
 
     _onBack = webviewReference.onBack.listen((_) async {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       // The willPop/pop pair here is equivalent to Navigator.maybePop(),
       // which is what's called from the flutter back button handler.
@@ -119,36 +109,11 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
     if (widget.hidden) {
       _onStateChanged =
           webviewReference.onStateChanged.listen((WebViewStateChanged state) {
-            if (state.type == WebViewState.finishLoad) {
-              webviewReference.show();
-            }
-          });
+        if (state.type == WebViewState.finishLoad) {
+          webviewReference.show();
+        }
+      });
     }
-
-    _onTapQQ = webviewReference.onTapQQ.listen((_) {
-      if (widget.onTapQQ != null)
-        widget.onTapQQ();
-    });
-
-    _onTapCustomService = webviewReference.onTapCustomService.listen((_) {
-      if (widget.onTapCustomService != null)
-        widget.onTapCustomService();
-    });
-
-    _onTapWeChat = webviewReference.onTapWeChat.listen((_) {
-      if (widget.onTapWeChat != null)
-        widget.onTapWeChat();
-    });
-
-    _onWebAlipay = webviewReference.onWebAlipay.listen((url) {
-      if (widget.onWebAlipay != null)
-        widget.onWebAlipay(url);
-    });
-
-    _onWebQQ = webviewReference.onWebQQ.listen((uin) {
-      if (widget.onWebQQ != null)
-        widget.onWebQQ(uin);
-    });
   }
 
   /// Equivalent to [Navigator.of(context)._history.last].
@@ -170,11 +135,6 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
     if (widget.hidden) {
       _onStateChanged.cancel();
     }
-    _onTapQQ?.cancel();
-    _onTapCustomService?.cancel();
-    _onTapWeChat?.cancel();
-    _onWebQQ?.cancel();
-    _onWebAlipay?.cancel();
     webviewReference.dispose();
   }
 
@@ -192,6 +152,7 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
             webviewReference.launch(
               widget.url,
               headers: widget.headers,
+              javascriptChannels: widget.javascriptChannels,
               withJavascript: widget.withJavascript,
               clearCache: widget.clearCache,
               clearCookies: widget.clearCookies,
@@ -200,18 +161,19 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
               userAgent: widget.userAgent,
               rect: _rect,
               withZoom: widget.withZoom,
+              displayZoomControls: widget.displayZoomControls,
               withLocalStorage: widget.withLocalStorage,
               withLocalUrl: widget.withLocalUrl,
+              localUrlScope: widget.localUrlScope,
+              withOverviewMode: widget.withOverviewMode,
+              useWideViewPort: widget.useWideViewPort,
               scrollBar: widget.scrollBar,
               supportMultipleWindows: widget.supportMultipleWindows,
               appCacheEnabled: widget.appCacheEnabled,
               allowFileURLs: widget.allowFileURLs,
               invalidUrlRegex: widget.invalidUrlRegex,
               geolocationEnabled: widget.geolocationEnabled,
-              qqEnabled: widget.qq,
-              customServiceEnabled: widget.customService,
-              weChatEnabled: widget.weChat,
-              weChatId: widget.weChatId,
+              debuggingEnabled: widget.debuggingEnabled,
             );
           } else {
             if (_rect != value) {
@@ -248,8 +210,8 @@ class _WebviewPlaceholder extends SingleChildRenderObjectWidget {
   }
 
   @override
-  void updateRenderObject(BuildContext context,
-      _WebviewPlaceholderRender renderObject) {
+  void updateRenderObject(
+      BuildContext context, _WebviewPlaceholderRender renderObject) {
     renderObject..onRectChanged = onRectChanged;
   }
 }
@@ -258,8 +220,7 @@ class _WebviewPlaceholderRender extends RenderProxyBox {
   _WebviewPlaceholderRender({
     RenderBox child,
     ValueChanged<Rect> onRectChanged,
-  })
-      : _callback = onRectChanged,
+  })  : _callback = onRectChanged,
         super(child);
 
   ValueChanged<Rect> _callback;

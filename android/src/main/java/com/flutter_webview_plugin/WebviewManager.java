@@ -1,16 +1,13 @@
 package com.flutter_webview_plugin;
 
 import android.content.Intent;
-import android.graphics.Color;
 import android.net.Uri;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
 import android.os.Build;
-import android.util.Log;
-import android.view.Gravity;
+import android.os.Handler;
 import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.CookieManager;
@@ -23,11 +20,9 @@ import android.widget.FrameLayout;
 import android.provider.MediaStore;
 
 import androidx.core.content.FileProvider;
-import androidx.core.view.GravityCompat;
 
 import android.database.Cursor;
 import android.provider.OpenableColumns;
-import android.widget.ProgressBar;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -121,81 +116,49 @@ class WebviewManager {
         return null;
     }
 
+    private final Handler platformThreadHandler;
     boolean closed = false;
     WebView webView;
-    WebViewGestureLayout webLayout;
-    AssistiveTouchView assistTouchView;
-    ProgressBar loadingBar;
-    FrameLayout containerLayout;
-    FrameLayout assistContainerLayout;
     Activity activity;
     BrowserClient webViewClient;
     ResultHandler resultHandler;
     Context context;
 
-    WebviewManager(final Activity activity,
-                   final Context context,
-                   final Boolean qq,
-                   final Boolean weChat,
-                   final Boolean customService) {
+    WebviewManager(final Activity activity, final Context context, final List<String> channelNames) {
         this.webView = new ObservableWebView(activity);
-        this.webLayout = new WebViewGestureLayout(activity);
-        this.assistTouchView = new AssistiveTouchView(activity, null);
-        this.loadingBar = new ProgressBar(activity, null, android.R.attr.progressBarStyle);
-        containerLayout = new FrameLayout(activity);
-        assistContainerLayout = new FrameLayout(activity);
-        webLayout.addView(webView);
-        containerLayout.addView(webLayout);
-        containerLayout.addView(assistContainerLayout,
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.MATCH_PARENT,
-                        FrameLayout.LayoutParams.MATCH_PARENT
-                )
-        );
-        assistContainerLayout.addView(assistTouchView,
-                new FrameLayout.LayoutParams(
-                        FrameLayout.LayoutParams.WRAP_CONTENT,
-                        FrameLayout.LayoutParams.WRAP_CONTENT
-                )
-        );
-        FrameLayout.LayoutParams progressParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT
-        );
-        progressParams.gravity = Gravity.CENTER;
-        loadingBar.setVisibility(View.GONE);
-        loadingBar.setClickable(false);
-
-        containerLayout.addView(loadingBar, progressParams);
-//        assistTouchView.setBackgroundColor(Color.argb(100, 255, 200, 0));
-        assistTouchView.setChildEnabled(qq, customService, weChat);
         this.activity = activity;
         this.context = context;
         this.resultHandler = new ResultHandler();
+        this.platformThreadHandler = new Handler(context.getMainLooper());
         webViewClient = new BrowserClient();
-        webView.setOnKeyListener((v, keyCode, event) -> {
-            if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                switch (keyCode) {
-                    case KeyEvent.KEYCODE_BACK:
-                        if (webView.canGoBack()) {
-                            webView.goBack();
-                        } else {
-                            FlutterWebviewPlugin.channel.invokeMethod("onBack", null);
-                        }
-                        return true;
+        webView.setOnKeyListener(new View.OnKeyListener() {
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    switch (keyCode) {
+                        case KeyEvent.KEYCODE_BACK:
+                            if (webView.canGoBack()) {
+                                webView.goBack();
+                            } else {
+                                FlutterWebviewPlugin.channel.invokeMethod("onBack", null);
+                            }
+                            return true;
+                    }
                 }
-            }
 
-            return false;
+                return false;
+            }
         });
 
-        ((ObservableWebView) webView).setOnScrollChangedCallback((x, y, oldx, oldy) -> {
-            Map<String, Object> yDirection = new HashMap<>();
-            yDirection.put("yDirection", (double) y);
-            FlutterWebviewPlugin.channel.invokeMethod("onScrollYChanged", yDirection);
-            Map<String, Object> xDirection = new HashMap<>();
-            xDirection.put("xDirection", (double) x);
-            FlutterWebviewPlugin.channel.invokeMethod("onScrollXChanged", xDirection);
+        ((ObservableWebView) webView).setOnScrollChangedCallback(new ObservableWebView.OnScrollChangedCallback() {
+            public void onScroll(int x, int y, int oldx, int oldy) {
+                Map<String, Object> yDirection = new HashMap<>();
+                yDirection.put("yDirection", (double) y);
+                FlutterWebviewPlugin.channel.invokeMethod("onScrollYChanged", yDirection);
+                Map<String, Object> xDirection = new HashMap<>();
+                xDirection.put("xDirection", (double) x);
+                FlutterWebviewPlugin.channel.invokeMethod("onScrollXChanged", xDirection);
+            }
         });
 
         webView.setWebViewClient(webViewClient);
@@ -282,35 +245,14 @@ class WebviewManager {
             public void onProgressChanged(WebView view, int progress) {
                 Map<String, Object> args = new HashMap<>();
                 args.put("progress", progress / 100.0);
-//                Log.d("aaaaa", "進度: " + (progress / 100.0));
-                if (progress / 100.0 >= 1) {
-                    loadingBar.setVisibility(View.GONE);
-                } else {
-                    loadingBar.setVisibility(View.VISIBLE);
-                }
                 FlutterWebviewPlugin.channel.invokeMethod("onProgressChanged", args);
             }
-        });
 
-        webLayout.setOnWebViewGestureListener(new WebViewGestureLayout.OnWebViewGestureListener() {
-            @Override
-            public void onBack() {
-                Log.d("aaa", "即將回到上一頁");
-                if (webView.canGoBack())
-                    webView.goBack();
-            }
-
-            @Override
-            public void onForward() {
-                Log.d("aaa", "即將前往下一頁");
-                if (webView.canGoForward())
-                    webView.goForward();
+            public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                callback.invoke(origin, true, false);
             }
         });
-    }
-
-    public void setOnButtonClickListener(AssistiveTouchView.OnChildClickListener l) {
-        assistTouchView.setOnChildClickListener(l);
+        registerJavaScriptChannelNames(channelNames);
     }
 
     private Uri getOutputFilename(String intentType) {
@@ -397,6 +339,13 @@ class WebviewManager {
         webView.clearFormData();
     }
 
+    private void registerJavaScriptChannelNames(List<String> channelNames) {
+        for (String channelName : channelNames) {
+            webView.addJavascriptInterface(
+                    new JavaScriptChannel(FlutterWebviewPlugin.channel, channelName, platformThreadHandler), channelName);
+        }
+    }
+
     void openUrl(
             boolean withJavascript,
             boolean clearCache,
@@ -406,19 +355,24 @@ class WebviewManager {
             String url,
             Map<String, String> headers,
             boolean withZoom,
+            boolean displayZoomControls,
             boolean withLocalStorage,
+            boolean withOverviewMode,
             boolean scrollBar,
             boolean supportMultipleWindows,
             boolean appCacheEnabled,
             boolean allowFileURLs,
             boolean useWideViewPort,
             String invalidUrlRegex,
-            boolean geolocationEnabled
+            boolean geolocationEnabled,
+            boolean debuggingEnabled
     ) {
         webView.getSettings().setJavaScriptEnabled(withJavascript);
         webView.getSettings().setBuiltInZoomControls(withZoom);
         webView.getSettings().setSupportZoom(withZoom);
+        webView.getSettings().setDisplayZoomControls(displayZoomControls);
         webView.getSettings().setDomStorageEnabled(withLocalStorage);
+        webView.getSettings().setLoadWithOverviewMode(withOverviewMode);
         webView.getSettings().setJavaScriptCanOpenWindowsAutomatically(supportMultipleWindows);
 
         webView.getSettings().setSupportMultipleWindows(supportMultipleWindows);
@@ -430,16 +384,15 @@ class WebviewManager {
 
         webView.getSettings().setUseWideViewPort(useWideViewPort);
 
+        // Handle debugging
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            webView.setWebContentsDebuggingEnabled(debuggingEnabled);
+        }
+
         webViewClient.updateInvalidUrlRegex(invalidUrlRegex);
 
         if (geolocationEnabled) {
             webView.getSettings().setGeolocationEnabled(true);
-            webView.setWebChromeClient(new WebChromeClient() {
-                @Override
-                public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
-                    callback.invoke(origin, true, false);
-                }
-            });
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -475,6 +428,10 @@ class WebviewManager {
 
     void reloadUrl(String url) {
         webView.loadUrl(url);
+    }
+
+    void reloadUrl(String url, Map<String, String> headers) {
+        webView.loadUrl(url, headers);
     }
 
     void close(MethodCall call, MethodChannel.Result result) {
@@ -535,9 +492,7 @@ class WebviewManager {
     }
 
     void resize(FrameLayout.LayoutParams params) {
-//        assistTouchView.setTopDiff(params.topMargin);
-        containerLayout.setLayoutParams(params);
-//        webView.setLayoutParams(params);
+        webView.setLayoutParams(params);
     }
 
     /**

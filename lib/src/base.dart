@@ -3,6 +3,9 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_webview_plugin/src/javascript_channel.dart';
+
+import 'javascript_message.dart';
 
 const _kChannel = 'flutter_webview_plugin';
 
@@ -13,15 +16,22 @@ enum WebViewState { shouldStart, startLoad, finishLoad, abortLoad }
 
 /// Singleton class that communicate with a Webview Instance
 class FlutterWebviewPlugin {
-  factory FlutterWebviewPlugin() => _instance ??= FlutterWebviewPlugin._();
+  factory FlutterWebviewPlugin() {
+    if(_instance == null) {
+      const MethodChannel methodChannel = const MethodChannel(_kChannel);
+      _instance = FlutterWebviewPlugin.private(methodChannel);
+    }
+    return _instance;
+  }
 
-  FlutterWebviewPlugin._() {
+  @visibleForTesting
+  FlutterWebviewPlugin.private(this._channel) {
     _channel.setMethodCallHandler(_handleMessages);
   }
 
   static FlutterWebviewPlugin _instance;
 
-  final _channel = const MethodChannel(_kChannel);
+  final MethodChannel _channel;
 
   final _onBack = StreamController<Null>.broadcast();
   final _onDestroy = StreamController<Null>.broadcast();
@@ -31,11 +41,12 @@ class FlutterWebviewPlugin {
   final _onScrollYChanged = StreamController<double>.broadcast();
   final _onProgressChanged = new StreamController<double>.broadcast();
   final _onHttpError = StreamController<WebViewHttpError>.broadcast();
-  final _onTapQQ = StreamController<Null>.broadcast();
-  final _onTapCustomService = StreamController<Null>.broadcast();
-  final _onTapWeChat = StreamController<Null>.broadcast();
-  final _onWebAlipay = StreamController<String>.broadcast();
-  final _onWebQQ = StreamController<String>.broadcast();
+  final _onPostMessage = StreamController<JavascriptMessage>.broadcast();
+
+  final Map<String, JavascriptChannel> _javascriptChannels =
+      // ignoring warning as min SDK version doesn't support collection literals yet
+      // ignore: prefer_collection_literals
+      Map<String, JavascriptChannel>();
 
   Future<Null> _handleMessages(MethodCall call) async {
     switch (call.method) {
@@ -54,8 +65,8 @@ class FlutterWebviewPlugin {
       case 'onScrollYChanged':
         _onScrollYChanged.add(call.arguments['yDirection']);
         break;
-      case "onProgressChanged":
-        _onProgressChanged.add(call.arguments["progress"]);
+      case 'onProgressChanged':
+        _onProgressChanged.add(call.arguments['progress']);
         break;
       case 'onState':
         _onStateChanged.add(
@@ -65,37 +76,15 @@ class FlutterWebviewPlugin {
         );
         break;
       case 'onHttpError':
-        _onHttpError.add(WebViewHttpError(call.arguments['code'], call.arguments['url']));
+        _onHttpError.add(
+            WebViewHttpError(call.arguments['code'], call.arguments['url']));
         break;
-      case 'tapQQ':
-        _onTapQQ.add(null);
-        break;
-      case 'tapCustomService':
-        _onTapCustomService.add(null);
-        break;
-      case 'tapWeChat':
-        _onTapWeChat.add(null);
-        break;
-      case 'openWebQQ':
-        _onWebQQ.add(call.arguments['uin']);
-        break;
-      case 'openWebAlipay':
-        _onWebAlipay.add(call.arguments['url']);
+      case 'javascriptChannelMessage':
+        _handleJavascriptChannelMessage(
+            call.arguments['channel'], call.arguments['message']);
         break;
     }
   }
-
-  Stream<String> get onWebAlipay => _onWebAlipay.stream;
-  Stream<String> get onWebQQ => _onWebQQ.stream;
-
-  /// Listening the OnDestroy LifeCycle Event for Android
-  Stream<Null> get onTapQQ => _onTapQQ.stream;
-
-  /// Listening the OnDestroy LifeCycle Event for Android
-  Stream<Null> get onTapCustomService => _onTapCustomService.stream;
-
-  /// Listening the OnDestroy LifeCycle Event for Android
-  Stream<Null> get onTapWeChat => _onTapWeChat.stream;
 
   /// Listening the OnDestroy LifeCycle Event for Android
   Stream<Null> get onDestroy => _onDestroy.stream;
@@ -138,13 +127,23 @@ class FlutterWebviewPlugin {
   ///     It is always enabled in UIWebView of iOS and  can not be disabled.
   /// - [withLocalUrl]: allow url as a local path
   ///     Allow local files on iOs > 9.0
+  /// - [localUrlScope]: allowed folder for local paths
+  ///     iOS only.
+  ///     If null and withLocalUrl is true, then it will use the url as the scope,
+  ///     allowing only itself to be read.
   /// - [scrollBar]: enable or disable scrollbar
   /// - [supportMultipleWindows] enable multiple windows support in Android
   /// - [invalidUrlRegex] is the regular expression of URLs that web view shouldn't load.
   /// For example, when webview is redirected to a specific URL, you want to intercept
   /// this process by stopping loading this URL and replacing webview by another screen.
-  Future<Null> launch(String url, {
+  ///   Android only settings:
+  /// - [displayZoomControls]: display zoom controls on webview
+  /// - [withOverviewMode]: enable overview mode for Android webview ( setLoadWithOverviewMode )
+  /// - [useWideViewPort]: use wide viewport for Android webview ( setUseWideViewPort )
+  Future<Null> launch(
+    String url, {
     Map<String, String> headers,
+    Set<JavascriptChannel> javascriptChannels,
     bool withJavascript,
     bool clearCache,
     bool clearCookies,
@@ -153,8 +152,11 @@ class FlutterWebviewPlugin {
     Rect rect,
     String userAgent,
     bool withZoom,
+    bool displayZoomControls,
     bool withLocalStorage,
     bool withLocalUrl,
+    String localUrlScope,
+    bool withOverviewMode,
     bool scrollBar,
     bool supportMultipleWindows,
     bool appCacheEnabled,
@@ -162,10 +164,7 @@ class FlutterWebviewPlugin {
     bool useWideViewPort,
     String invalidUrlRegex,
     bool geolocationEnabled,
-    bool qqEnabled,
-    bool customServiceEnabled,
-    bool weChatEnabled,
-    String weChatId,
+    bool debuggingEnabled,
   }) async {
     final args = <String, dynamic>{
       'url': url,
@@ -176,8 +175,10 @@ class FlutterWebviewPlugin {
       'enableAppScheme': enableAppScheme ?? true,
       'userAgent': userAgent,
       'withZoom': withZoom ?? false,
+      'displayZoomControls': displayZoomControls ?? false,
       'withLocalStorage': withLocalStorage ?? true,
       'withLocalUrl': withLocalUrl ?? false,
+      'localUrlScope': localUrlScope,
       'scrollBar': scrollBar ?? true,
       'supportMultipleWindows': supportMultipleWindows ?? false,
       'appCacheEnabled': appCacheEnabled ?? false,
@@ -185,15 +186,28 @@ class FlutterWebviewPlugin {
       'useWideViewPort': useWideViewPort ?? false,
       'invalidUrlRegex': invalidUrlRegex,
       'geolocationEnabled': geolocationEnabled ?? false,
-      'qq': qqEnabled ?? false,
-      'customService': customServiceEnabled ?? false,
-      'weChat': weChatEnabled ?? false,
-      'weChatId': weChatId ?? "",
+      'withOverviewMode': withOverviewMode ?? false,
+      'debuggingEnabled': debuggingEnabled ?? false,
     };
 
     if (headers != null) {
       args['headers'] = headers;
     }
+
+    _assertJavascriptChannelNamesAreUnique(javascriptChannels);
+
+    if (javascriptChannels != null) {
+      javascriptChannels.forEach((channel) {
+        _javascriptChannels[channel.name] = channel;
+      });
+    } else {
+      if (_javascriptChannels.isNotEmpty) {
+        _javascriptChannels.clear();
+      }
+    }
+
+    args['javascriptChannelNames'] =
+        _extractJavascriptChannelNames(javascriptChannels).toList();
 
     if (rect != null) {
       args['rect'] = {
@@ -214,7 +228,10 @@ class FlutterWebviewPlugin {
 
   /// Close the Webview
   /// Will trigger the [onDestroy] event
-  Future<Null> close() async => await _channel.invokeMethod('close');
+  Future<Null> close() async {
+    _javascriptChannels.clear();
+    await _channel.invokeMethod('close');
+  }
 
   /// Reloads the WebView.
   Future<Null> reload() async => await _channel.invokeMethod('reload');
@@ -232,16 +249,21 @@ class FlutterWebviewPlugin {
   Future<Null> show() async => await _channel.invokeMethod('show');
 
   // Reload webview with a url
-  Future<Null> reloadUrl(String url) async {
-    final args = <String, String>{'url': url};
+  Future<Null> reloadUrl(String url, {Map<String, String> headers}) async {
+    final args = <String, dynamic>{'url': url};
+    if (headers != null) {
+      args['headers'] = headers;
+    }
     await _channel.invokeMethod('reloadUrl', args);
   }
 
   // Clean cookies on WebView
-  Future<Null> cleanCookies() async => await _channel.invokeMethod('cleanCookies');
+  Future<Null> cleanCookies() async =>
+      await _channel.invokeMethod('cleanCookies');
 
   // Stops current loading process
-  Future<Null> stopLoading() async => await _channel.invokeMethod('stopLoading');
+  Future<Null> stopLoading() async =>
+      await _channel.invokeMethod('stopLoading');
 
   /// Close all Streams
   void dispose() {
@@ -252,6 +274,7 @@ class FlutterWebviewPlugin {
     _onScrollXChanged.close();
     _onScrollYChanged.close();
     _onHttpError.close();
+    _onPostMessage.close();
     _instance = null;
   }
 
@@ -279,6 +302,29 @@ class FlutterWebviewPlugin {
       'height': rect.height,
     };
     await _channel.invokeMethod('resize', args);
+  }
+
+  Set<String> _extractJavascriptChannelNames(Set<JavascriptChannel> channels) {
+    final Set<String> channelNames = channels == null
+        // ignore: prefer_collection_literals
+        ? Set<String>()
+        : channels.map((JavascriptChannel channel) => channel.name).toSet();
+    return channelNames;
+  }
+
+  void _handleJavascriptChannelMessage(
+      final String channelName, final String message) {
+    _javascriptChannels[channelName]
+        .onMessageReceived(JavascriptMessage(message));
+  }
+
+  void _assertJavascriptChannelNamesAreUnique(
+      final Set<JavascriptChannel> channels) {
+    if (channels == null || channels.isEmpty) {
+      return;
+    }
+
+    assert(_extractJavascriptChannelNames(channels).length == channels.length);
   }
 }
 
