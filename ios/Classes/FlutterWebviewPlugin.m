@@ -86,6 +86,8 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     NSNumber *scrollBar = call.arguments[@"scrollBar"];
     NSNumber *withJavascript = call.arguments[@"withJavascript"];
     _invalidUrlRegex = call.arguments[@"invalidUrlRegex"];
+    
+    _enableZoom = [withZoom boolValue];
 
     if (clearCache != (id)[NSNull null] && [clearCache boolValue]) {
         [[NSURLCache sharedURLCache] removeAllCachedResponses];
@@ -118,12 +120,14 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     }
 
     self.webview = [[WKWebView alloc] initWithFrame:rc];
+    self.webview.contentMode = UIViewContentModeScaleToFill;
+    
+    NSLog(@"可否縮放 %@", [withZoom stringValue]);
+    
     self.webview.UIDelegate = self;
     self.webview.navigationDelegate = self;
     self.webview.scrollView.delegate = self;
     self.webview.hidden = [hidden boolValue];
-    self.webview.scrollView.maximumZoomScale = 1.0;
-    self.webview.scrollView.minimumZoomScale = 1.0;
     self.webview.scrollView.showsHorizontalScrollIndicator = [scrollBar boolValue];
     self.webview.scrollView.showsVerticalScrollIndicator = [scrollBar boolValue];
     
@@ -136,7 +140,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
         [preferences setJavaScriptEnabled:NO];
     }
 
-    _enableZoom = [withZoom boolValue];
+    NSLog(@"call initWebview: %@", [withZoom stringValue]);
 
     UIViewController* presentedViewController = self.viewController.presentedViewController;
     UIViewController* currentViewController = presentedViewController != nil ? presentedViewController : self.viewController;
@@ -365,15 +369,21 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 }
 
 - (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation {
-    NSString *javascript = @"var meta = document.createElement('meta');meta.setAttribute('name', 'viewport');meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');document.getElementsByTagName('head')[0].appendChild(meta);";
-    [webView evaluateJavaScript:javascript completionHandler:nil];
+    NSLog(@"call didCommitNavigation");
+    if (_enableZoom) {
+        NSString *javascript = @"var meta = document.createElement('meta');meta.setAttribute('name', 'viewport');meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=10.0, user-scalable=yes');document.getElementsByTagName('head')[0].appendChild(meta);";
+        [webView evaluateJavaScript:javascript completionHandler:nil];
+    } else {
+        NSString *javascript = @"var meta = document.createElement('meta');meta.setAttribute('name', 'viewport');meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');document.getElementsByTagName('head')[0].appendChild(meta);";
+        [webView evaluateJavaScript:javascript completionHandler:nil];
+    }
 }
 
 #pragma mark -- UIScrollViewDelegate
-- (void)scrollViewWillBeginDragging:(UIScrollView *)scrollView {
-    if (scrollView.pinchGestureRecognizer.isEnabled != _enableZoom) {
-        scrollView.pinchGestureRecognizer.enabled = _enableZoom;
-    }
+
+- (UIView *)viewForZoomingInScrollView:(UIScrollView *)scrollView {
+    NSLog(@"call viewForZoomingInScrollView");
+    return nil;
 }
 
 @end
