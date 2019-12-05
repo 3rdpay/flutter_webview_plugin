@@ -34,7 +34,7 @@ class MyApp extends StatelessWidget {
         '/': (_) => const MyHomePage(title: 'Flutter WebView Demo'),
         '/widget': (_) {
           return WebviewScaffold(
-            url: selectedUrl,
+            url: "https://www.google.com/webhp?hl=zh-TW",
             javascriptChannels: jsChannels,
             appBar: AppBar(
               title: const Text('Widget WebView'),
@@ -48,6 +48,7 @@ class MyApp extends StatelessWidget {
                 child: Text('Waiting.....'),
               ),
             ),
+            enableAppScheme: true,
             bottomNavigationBar: BottomAppBar(
               child: Row(
                 children: <Widget>[

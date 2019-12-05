@@ -19,6 +19,8 @@ class WebviewScaffold extends StatefulWidget {
     this.clearCookies,
     this.enableAppScheme,
     this.userAgent,
+    this.interceptScheme,
+    this.interceptSchemeHandler,
     this.primary = true,
     this.persistentFooterButtons,
     this.bottomNavigationBar,
@@ -45,6 +47,12 @@ class WebviewScaffold extends StatefulWidget {
   final String url;
   final Map<String, String> headers;
   final Set<JavascriptChannel> javascriptChannels;
+
+  /// 註冊需要攔截自行處理的 scheme
+  final List<String> interceptScheme;
+
+  /// 攔截scheme得到的url
+  final void Function(String url) interceptSchemeHandler;
   final bool withJavascript;
   final bool clearCache;
   final bool clearCookies;
@@ -87,6 +95,9 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
   void initState() {
     super.initState();
     webviewReference.close();
+
+    FlutterWebviewPlugin()
+        .registerUrlNavigationDelegate(widget.interceptSchemeHandler);
 
     _onBack = webviewReference.onBack.listen((_) async {
       if (!mounted) {
@@ -161,6 +172,7 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
               enableAppScheme: widget.enableAppScheme,
               userAgent: widget.userAgent,
               rect: _rect,
+              interceptScheme: widget.interceptScheme,
               withZoom: widget.withZoom,
               displayZoomControls: widget.displayZoomControls,
               withLocalStorage: widget.withLocalStorage,

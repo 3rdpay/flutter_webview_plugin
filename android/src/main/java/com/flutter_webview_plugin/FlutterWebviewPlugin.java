@@ -31,6 +31,8 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     private static final String CHANNEL_NAME = "flutter_webview_plugin";
     private static final String JS_CHANNEL_NAMES_FIELD = "javascriptChannelNames";
 
+    static List<String> interceptScheme;
+
     public static void registerWith(PluginRegistry.Registrar registrar) {
         channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
         final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(), registrar.activeContext());
@@ -88,7 +90,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         }
     }
 
-     void openUrl(MethodCall call, MethodChannel.Result result) {
+    void openUrl(MethodCall call, MethodChannel.Result result) {
         boolean hidden = call.argument("hidden");
         String url = call.argument("url");
         String userAgent = call.argument("userAgent");
@@ -108,6 +110,10 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         String invalidUrlRegex = call.argument("invalidUrlRegex");
         boolean geolocationEnabled = call.argument("geolocationEnabled");
         boolean debuggingEnabled = call.argument("debuggingEnabled");
+
+        if (call.hasArgument("interceptScheme")) {
+            interceptScheme = call.argument("interceptScheme");
+        }
 
         if (webViewManager == null || webViewManager.closed == true) {
             Map<String, Object> arguments = (Map<String, Object>) call.arguments;

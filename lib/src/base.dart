@@ -17,7 +17,7 @@ enum WebViewState { shouldStart, startLoad, finishLoad, abortLoad }
 /// Singleton class that communicate with a Webview Instance
 class FlutterWebviewPlugin {
   factory FlutterWebviewPlugin() {
-    if(_instance == null) {
+    if (_instance == null) {
       const MethodChannel methodChannel = const MethodChannel(_kChannel);
       _instance = FlutterWebviewPlugin.private(methodChannel);
     }
@@ -48,13 +48,26 @@ class FlutterWebviewPlugin {
       // ignore: prefer_collection_literals
       Map<String, JavascriptChannel>();
 
-  Future<Null> _handleMessages(MethodCall call) async {
+  void Function(String url) interceptSchemeHandler;
+
+  void registerUrlNavigationDelegate(void Function(String url) delegate) {
+    interceptSchemeHandler = delegate;
+  }
+
+  Future<dynamic> _handleMessages(MethodCall call) async {
     switch (call.method) {
       case 'onBack':
         _onBack.add(null);
         break;
       case 'onDestroy':
         _onDestroy.add(null);
+        break;
+      case 'interceptSchemeHandler':
+        final url = call.arguments['url'];
+        print("監聽到回傳處理: $url");
+        if (interceptSchemeHandler != null) {
+          return interceptSchemeHandler(url);
+        }
         break;
       case 'onUrlChanged':
         _onUrlChanged.add(call.arguments['url']);
@@ -150,6 +163,7 @@ class FlutterWebviewPlugin {
     bool hidden,
     bool enableAppScheme,
     Rect rect,
+    List<String> interceptScheme,
     String userAgent,
     bool withZoom,
     bool displayZoomControls,
@@ -192,6 +206,10 @@ class FlutterWebviewPlugin {
 
     if (headers != null) {
       args['headers'] = headers;
+    }
+
+    if (interceptScheme != null) {
+      args['interceptScheme'] = interceptScheme;
     }
 
     _assertJavascriptChannelNamesAreUnique(javascriptChannels);
