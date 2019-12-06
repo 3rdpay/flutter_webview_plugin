@@ -325,10 +325,10 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     }
 
     if (interceptScheme != nil) {
-        NSLog(@"需要自行處理 scheme 跳轉 %@", webView.URL.scheme);
+        NSLog(@"需要自行處理 scheme 跳轉 %@", navigationAction.request.URL.scheme);
         BOOL identicalStringFound = NO;
         for (NSString *scheme in interceptScheme) {
-            if ([webView.URL.scheme isEqualToString:scheme]) {
+            if ([navigationAction.request.URL.scheme isEqualToString:scheme]) {
                 identicalStringFound = YES;
                 break;
             }
@@ -338,7 +338,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
         
         if (identicalStringFound) {
             // 自行處理
-            [channel invokeMethod:@"interceptSchemeHandler" arguments:@{@"url": webView.URL.absoluteString}];
+            [channel invokeMethod:@"interceptSchemeHandler" arguments:@{@"url": navigationAction.request.URL.absoluteString}];
             decisionHandler(WKNavigationActionPolicyCancel);
             return;
         }
