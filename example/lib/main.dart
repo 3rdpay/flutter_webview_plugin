@@ -18,7 +18,10 @@ final Set<JavascriptChannel> jsChannels = [
       }),
 ].toSet();
 
-void main() => runApp(MyApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(MyApp());
+}
 
 class MyApp extends StatelessWidget {
   final flutterWebViewPlugin = FlutterWebviewPlugin();
@@ -34,8 +37,9 @@ class MyApp extends StatelessWidget {
         '/': (_) => const MyHomePage(title: 'Flutter WebView Demo'),
         '/widget': (_) {
           return WebviewScaffold(
-            url: "https://www.google.com/webhp?hl=zh-TW",
+            url: selectedUrl,
             javascriptChannels: jsChannels,
+            mediaPlaybackRequiresUserGesture: false,
             appBar: AppBar(
               title: const Text('Widget WebView'),
             ),
@@ -48,7 +52,6 @@ class MyApp extends StatelessWidget {
                 child: Text('Waiting.....'),
               ),
             ),
-            enableAppScheme: true,
             bottomNavigationBar: BottomAppBar(
               child: Row(
                 children: <Widget>[

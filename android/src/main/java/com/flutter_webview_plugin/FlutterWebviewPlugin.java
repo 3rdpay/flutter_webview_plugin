@@ -1,15 +1,17 @@
 package com.flutter_webview_plugin;
 
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Point;
+import android.os.Build;
 import android.view.Display;
-import android.widget.FrameLayout;
 import android.webkit.CookieManager;
 import android.webkit.ValueCallback;
-import android.os.Build;
+import android.webkit.WebStorage;
+import android.widget.FrameLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -24,24 +26,25 @@ import io.flutter.plugin.common.PluginRegistry;
  * FlutterWebviewPlugin
  */
 public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.ActivityResultListener {
-    private Activity activity;
+    @SuppressLint("StaticFieldLeak")
+    static Activity activity;
     private WebviewManager webViewManager;
     private Context context;
     static MethodChannel channel;
     private static final String CHANNEL_NAME = "flutter_webview_plugin";
     private static final String JS_CHANNEL_NAMES_FIELD = "javascriptChannelNames";
 
-    static List<String> interceptScheme;
-
     public static void registerWith(PluginRegistry.Registrar registrar) {
-        channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
-        final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(), registrar.activeContext());
-        registrar.addActivityResultListener(instance);
-        channel.setMethodCallHandler(instance);
+        if (registrar.activity() != null) {
+            channel = new MethodChannel(registrar.messenger(), CHANNEL_NAME);
+            final FlutterWebviewPlugin instance = new FlutterWebviewPlugin(registrar.activity(), registrar.activeContext());
+            registrar.addActivityResultListener(instance);
+            channel.setMethodCallHandler(instance);
+        }
     }
 
     FlutterWebviewPlugin(Activity activity, Context context) {
-        this.activity = activity;
+        FlutterWebviewPlugin.activity = activity;
         this.context = context;
     }
 
@@ -84,10 +87,25 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
             case "cleanCookies":
                 cleanCookies(call, result);
                 break;
+            case "canGoBack":
+                canGoBack(result);
+                break;
+            case "canGoForward":
+                canGoForward(result);
+                break;
+            case "cleanCache":
+                cleanCache(result);
+                break;
             default:
                 result.notImplemented();
                 break;
         }
+    }
+
+    private void cleanCache(MethodChannel.Result result) {
+        webViewManager.cleanCache();
+        WebStorage.getInstance().deleteAllData();
+        result.success(null);
     }
 
     void openUrl(MethodCall call, MethodChannel.Result result) {
@@ -97,6 +115,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         boolean withJavascript = call.argument("withJavascript");
         boolean clearCache = call.argument("clearCache");
         boolean clearCookies = call.argument("clearCookies");
+        boolean mediaPlaybackRequiresUserGesture = call.argument("mediaPlaybackRequiresUserGesture");
         boolean withZoom = call.argument("withZoom");
         boolean displayZoomControls = call.argument("displayZoomControls");
         boolean withLocalStorage = call.argument("withLocalStorage");
@@ -110,10 +129,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
         String invalidUrlRegex = call.argument("invalidUrlRegex");
         boolean geolocationEnabled = call.argument("geolocationEnabled");
         boolean debuggingEnabled = call.argument("debuggingEnabled");
-
-        if (call.hasArgument("interceptScheme")) {
-            interceptScheme = call.argument("interceptScheme");
-        }
+        boolean ignoreSSLErrors = call.argument("ignoreSSLErrors");
 
         if (webViewManager == null || webViewManager.closed == true) {
             Map<String, Object> arguments = (Map<String, Object>) call.arguments;
@@ -132,6 +148,7 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
                 clearCache,
                 hidden,
                 clearCookies,
+                mediaPlaybackRequiresUserGesture,
                 userAgent,
                 url,
                 headers,
@@ -146,7 +163,8 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
                 useWideViewPort,
                 invalidUrlRegex,
                 geolocationEnabled,
-                debuggingEnabled
+                debuggingEnabled,
+                ignoreSSLErrors
         );
         result.success(null);
     }
@@ -186,6 +204,19 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
     }
 
     /**
+     * Checks if can navigate back
+     *
+     * @param result
+     */
+    private void canGoBack(MethodChannel.Result result) {
+        if (webViewManager != null) {
+            result.success(webViewManager.canGoBack());
+        } else {
+            result.error("Webview is null", null, null);
+        }
+    }
+
+    /**
      * Navigates back on the Webview.
      */
     private void back(MethodCall call, MethodChannel.Result result) {
@@ -193,6 +224,19 @@ public class FlutterWebviewPlugin implements MethodCallHandler, PluginRegistry.A
             webViewManager.back(call, result);
         }
         result.success(null);
+    }
+
+    /**
+     * Checks if can navigate forward
+     *
+     * @param result
+     */
+    private void canGoForward(MethodChannel.Result result) {
+        if (webViewManager != null) {
+            result.success(webViewManager.canGoForward());
+        } else {
+            result.error("Webview is null", null, null);
+        }
     }
 
     /**

@@ -1,37 +1,46 @@
 package com.flutter_webview_plugin;
 
-import android.content.Intent;
-import android.net.Uri;
 import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.database.Cursor;
+import android.graphics.Color;
+import android.net.Uri;
+import android.net.http.SslError;
 import android.os.Build;
 import android.os.Handler;
+import android.provider.MediaStore;
+import android.provider.OpenableColumns;
+import android.util.Log;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
+import android.webkit.SslErrorHandler;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.widget.FrameLayout;
-import android.provider.MediaStore;
 
 import androidx.core.content.FileProvider;
 
-import android.database.Cursor;
-import android.provider.OpenableColumns;
-
-import java.util.List;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
 import java.io.File;
-import java.util.Date;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import io.flutter.plugin.common.MethodCall;
 import io.flutter.plugin.common.MethodChannel;
@@ -49,6 +58,10 @@ class WebviewManager {
     private final static int FILECHOOSER_RESULTCODE = 1;
     private Uri fileUri;
     private Uri videoUri;
+
+    private View mMoiveView = null;
+    private ViewGroup mMoiveParentView = null;
+    private Set<Pair<Integer, Integer>> mFlags = new HashSet<>();
 
     private long getFileSize(Uri fileUri) {
         Cursor returnCursor = context.getContentResolver().query(fileUri, null, null, null, null);
@@ -123,6 +136,7 @@ class WebviewManager {
     BrowserClient webViewClient;
     ResultHandler resultHandler;
     Context context;
+    private boolean ignoreSSLErrors = false;
 
     WebviewManager(final Activity activity, final Context context, final List<String> channelNames) {
         this.webView = new ObservableWebView(activity);
@@ -130,8 +144,16 @@ class WebviewManager {
         this.context = context;
         this.resultHandler = new ResultHandler();
         this.platformThreadHandler = new Handler(context.getMainLooper());
-        System.out.println("打印:::::::");
-        webViewClient = new BrowserClient();
+        webViewClient = new BrowserClient() {
+            @Override
+            public void onReceivedSslError(WebView view, SslErrorHandler handler, SslError error) {
+                if (ignoreSSLErrors) {
+                    handler.proceed();
+                } else {
+                    super.onReceivedSslError(view, handler, error);
+                }
+            }
+        };
         webView.setOnKeyListener(new View.OnKeyListener() {
             @Override
             public boolean onKey(View v, int keyCode, KeyEvent event) {
@@ -164,6 +186,83 @@ class WebviewManager {
 
         webView.setWebViewClient(webViewClient);
         webView.setWebChromeClient(new WebChromeClient() {
+
+            @Override
+            public void onShowCustomView(View view, CustomViewCallback callback) {
+                Log.d("全螢幕", "全螢幕處理");
+//                Activity mActivity;
+                FlutterWebviewPlugin.activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE);
+
+                Window mWindow = FlutterWebviewPlugin.activity.getWindow();
+                Pair<Integer, Integer> mPair;
+                // 保存当前屏幕的状态
+                if ((mWindow.getAttributes().flags & WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) == 0) {
+                    mPair = new Pair<>(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, 0);
+                    mWindow.setFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    mFlags.add(mPair);
+                }
+
+                if ((mWindow.getAttributes().flags & WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED) == 0) {
+                    mPair = new Pair<>(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED, 0);
+                    mWindow.setFlags(WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED, WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+                    mFlags.add(mPair);
+                }
+
+                if (mMoiveView != null) {
+                    callback.onCustomViewHidden();
+                    return;
+                }
+
+                if (webView != null) {
+                    webView.setVisibility(View.GONE);
+                }
+
+                if (mMoiveParentView == null) {
+                    FrameLayout mDecorView = (FrameLayout) FlutterWebviewPlugin.activity.getWindow().getDecorView();
+                    mMoiveParentView = new FrameLayout(FlutterWebviewPlugin.activity);
+                    mMoiveParentView.setBackgroundColor(Color.BLACK);
+                    mDecorView.addView(mMoiveParentView);
+                }
+                mMoiveView = view;
+                mMoiveParentView.addView(mMoiveView);
+                mMoiveParentView.setVisibility(View.VISIBLE);
+            }
+
+            @Override
+            public void onHideCustomView() {
+                Log.d("全螢幕", "局部螢幕處理");
+                if (mMoiveView == null) {
+                    return;
+                }
+                if (FlutterWebviewPlugin.activity != null && FlutterWebviewPlugin.activity.getRequestedOrientation() != ActivityInfo.SCREEN_ORIENTATION_PORTRAIT) {
+                    FlutterWebviewPlugin.activity.setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+                }
+
+                if (!mFlags.isEmpty()) {
+                    for (Pair<Integer, Integer> mPair : mFlags) {
+                        FlutterWebviewPlugin.activity.getWindow().setFlags(mPair.second, mPair.first);
+                    }
+                    mFlags.clear();
+                }
+
+                mMoiveView.setVisibility(View.GONE);
+                if (mMoiveParentView != null && mMoiveView != null) {
+                    mMoiveParentView.removeView(mMoiveView);
+
+                }
+                if (mMoiveParentView != null) {
+                    mMoiveParentView.setVisibility(View.GONE);
+                }
+
+//                if (this.mCallback != null) {
+//                    mCallback.onCustomViewHidden();
+//                }
+                mMoiveView = null;
+                if (webView != null) {
+                    webView.setVisibility(View.VISIBLE);
+                }
+            }
+
             //The undocumented magic method override
             //Eclipse will swear at you if you try to put @Override here
             // For Android 3.0+
@@ -241,6 +340,7 @@ class WebviewManager {
                 activity.startActivityForResult(chooserIntent, FILECHOOSER_RESULTCODE);
                 return true;
             }
+
 
             @Override
             public void onProgressChanged(WebView view, int progress) {
@@ -352,6 +452,7 @@ class WebviewManager {
             boolean clearCache,
             boolean hidden,
             boolean clearCookies,
+            boolean mediaPlaybackRequiresUserGesture,
             String userAgent,
             String url,
             Map<String, String> headers,
@@ -366,7 +467,8 @@ class WebviewManager {
             boolean useWideViewPort,
             String invalidUrlRegex,
             boolean geolocationEnabled,
-            boolean debuggingEnabled
+            boolean debuggingEnabled,
+            boolean ignoreSSLErrors
     ) {
         webView.getSettings().setJavaScriptEnabled(withJavascript);
         webView.getSettings().setBuiltInZoomControls(withZoom);
@@ -385,10 +487,16 @@ class WebviewManager {
 
         webView.getSettings().setUseWideViewPort(useWideViewPort);
 
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            webView.getSettings().setMediaPlaybackRequiresUserGesture(mediaPlaybackRequiresUserGesture);
+        }
+
         // Handle debugging
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
             webView.setWebContentsDebuggingEnabled(debuggingEnabled);
         }
+        //ignore SSL errors
+        this.ignoreSSLErrors = ignoreSSLErrors;
 
         webViewClient.updateInvalidUrlRegex(invalidUrlRegex);
 
@@ -508,6 +616,13 @@ class WebviewManager {
      */
     boolean canGoForward() {
         return webView.canGoForward();
+    }
+
+    /**
+     * Clears cache
+     */
+    void cleanCache() {
+        webView.clearCache(true);
     }
 
     void hide(MethodCall call, MethodChannel.Result result) {
