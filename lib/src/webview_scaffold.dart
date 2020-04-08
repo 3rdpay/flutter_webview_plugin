@@ -20,6 +20,8 @@ class WebviewScaffold extends StatefulWidget {
     this.mediaPlaybackRequiresUserGesture = true,
     this.enableAppScheme,
     this.userAgent,
+    this.interceptScheme,
+    this.interceptSchemeHandler,
     this.primary = true,
     this.persistentFooterButtons,
     this.bottomNavigationBar,
@@ -42,6 +44,12 @@ class WebviewScaffold extends StatefulWidget {
     this.debuggingEnabled = false,
     this.ignoreSSLErrors = false,
   }) : super(key: key);
+
+  /// 註冊需要攔截自行處理的 scheme
+  final List<String> interceptScheme;
+
+  /// 攔截scheme得到的url
+  final void Function(String url) interceptSchemeHandler;
 
   final PreferredSizeWidget appBar;
   final String url;
@@ -91,6 +99,9 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
   void initState() {
     super.initState();
     webviewReference.close();
+
+    FlutterWebviewPlugin()
+        .registerUrlNavigationDelegate(widget.interceptSchemeHandler);
 
     _onBack = webviewReference.onBack.listen((_) async {
       if (!mounted) {
@@ -160,7 +171,9 @@ class _WebviewScaffoldState extends State<WebviewScaffold> {
               withJavascript: widget.withJavascript,
               clearCache: widget.clearCache,
               clearCookies: widget.clearCookies,
-              mediaPlaybackRequiresUserGesture: widget.mediaPlaybackRequiresUserGesture,
+              mediaPlaybackRequiresUserGesture:
+                  widget.mediaPlaybackRequiresUserGesture,
+              interceptScheme: widget.interceptScheme,
               hidden: widget.hidden,
               enableAppScheme: widget.enableAppScheme,
               userAgent: widget.userAgent,

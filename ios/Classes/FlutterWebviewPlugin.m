@@ -7,6 +7,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
 @interface FlutterWebviewPlugin() <WKNavigationDelegate, UIScrollViewDelegate, WKUIDelegate> {
     BOOL _enableAppScheme;
     BOOL _enableZoom;
+    NSArray* interceptScheme;
     NSString* _invalidUrlRegex;
     NSMutableSet* _javaScriptChannelNames;
     NSNumber*  _ignoreSSLErrors;
@@ -95,6 +96,7 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     NSNumber *scrollBar = call.arguments[@"scrollBar"];
     NSNumber *withJavascript = call.arguments[@"withJavascript"];
     _invalidUrlRegex = call.arguments[@"invalidUrlRegex"];
+    interceptScheme = call.arguments[@"interceptScheme"];
     _ignoreSSLErrors = call.arguments[@"ignoreSSLErrors"];
     _javaScriptChannelNames = [[NSMutableSet alloc] init];
     
@@ -397,6 +399,26 @@ static NSString *const CHANNEL_NAME = @"flutter_webview_plugin";
     } else if (!isInvalid) {
         id data = @{@"url": navigationAction.request.URL.absoluteString};
         [channel invokeMethod:@"onUrlChanged" arguments:data];
+    }
+    
+    if (interceptScheme != nil) {
+        NSLog(@"需要自行處理 scheme 跳轉 %@", webView.URL.scheme);
+        BOOL identicalStringFound = NO;
+        for (NSString *scheme in interceptScheme) {
+            if ([webView.URL.scheme isEqualToString:scheme]) {
+                identicalStringFound = YES;
+                break;
+            }
+        }
+
+        NSLog(@"需要自行處理 scheme 跳轉 結果: %d, 攔截列表: %@", identicalStringFound, interceptScheme);
+
+        if (identicalStringFound) {
+            // 自行處理
+            [channel invokeMethod:@"interceptSchemeHandler" arguments:@{@"url": webView.URL.absoluteString}];
+            decisionHandler(WKNavigationActionPolicyCancel);
+            return;
+        }
     }
 
     if (_enableAppScheme ||

@@ -2,6 +2,7 @@ package com.flutter_webview_plugin;
 
 import android.annotation.TargetApi;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.os.Build;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -72,6 +73,21 @@ public class BrowserClient extends WebViewClient {
         data.put("url", url);
         data.put("type", isInvalid ? "abortLoad" : "shouldStart");
 
+        System.out.println("檢測事件攔截" + url);
+
+        if (FlutterWebviewPlugin.interceptScheme != null) {
+            Uri parseUri = Uri.parse(url);
+            String urlScheme = parseUri.getScheme();
+            boolean result = FlutterWebviewPlugin.interceptScheme.contains(urlScheme);
+            System.out.println("檢視是否需要攔截 scheme: " + urlScheme);
+            System.out.println("檢視是否需要攔截 結果: " + result + ", 列表" + FlutterWebviewPlugin.interceptScheme);
+            if (result) {
+                // 需要攔截
+                FlutterWebviewPlugin.channel.invokeMethod("interceptSchemeHandler", data);
+                return true;
+            }
+        }
+
         FlutterWebviewPlugin.channel.invokeMethod("onState", data);
         return isInvalid;
     }
@@ -84,6 +100,21 @@ public class BrowserClient extends WebViewClient {
         Map<String, Object> data = new HashMap<>();
         data.put("url", url);
         data.put("type", isInvalid ? "abortLoad" : "shouldStart");
+
+        System.out.println("檢測事件攔截" + url);
+
+        if (FlutterWebviewPlugin.interceptScheme != null) {
+            Uri parseUri = Uri.parse(url);
+            String urlScheme = parseUri.getScheme();
+            boolean result = FlutterWebviewPlugin.interceptScheme.contains(urlScheme);
+            System.out.println("檢視是否需要攔截 scheme: " + urlScheme);
+            System.out.println("檢視是否需要攔截 結果: " + result + ", 列表" + FlutterWebviewPlugin.interceptScheme);
+            if (result) {
+                // 需要攔截
+                FlutterWebviewPlugin.channel.invokeMethod("interceptSchemeHandler", data);
+                return true;
+            }
+        }
 
         FlutterWebviewPlugin.channel.invokeMethod("onState", data);
         return isInvalid;

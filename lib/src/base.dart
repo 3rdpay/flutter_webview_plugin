@@ -17,7 +17,7 @@ enum WebViewState { shouldStart, startLoad, finishLoad, abortLoad }
 /// Singleton class that communicate with a Webview Instance
 class FlutterWebviewPlugin {
   factory FlutterWebviewPlugin() {
-    if(_instance == null) {
+    if (_instance == null) {
       const MethodChannel methodChannel = const MethodChannel(_kChannel);
       _instance = FlutterWebviewPlugin.private(methodChannel);
     }
@@ -48,6 +48,12 @@ class FlutterWebviewPlugin {
       // ignore: prefer_collection_literals
       Map<String, JavascriptChannel>();
 
+  void Function(String url) interceptSchemeHandler;
+
+  void registerUrlNavigationDelegate(void Function(String url) delegate) {
+    interceptSchemeHandler = delegate;
+  }
+
   Future<Null> _handleMessages(MethodCall call) async {
     switch (call.method) {
       case 'onBack':
@@ -55,6 +61,13 @@ class FlutterWebviewPlugin {
         break;
       case 'onDestroy':
         _onDestroy.add(null);
+        break;
+      case 'interceptSchemeHandler':
+        final url = call.arguments['url'];
+        print('監聽到回傳處理: $url');
+        if (interceptSchemeHandler != null) {
+          return interceptSchemeHandler(url);
+        }
         break;
       case 'onUrlChanged':
         _onUrlChanged.add(call.arguments['url']);
@@ -152,6 +165,7 @@ class FlutterWebviewPlugin {
     bool hidden,
     bool enableAppScheme,
     Rect rect,
+    List<String> interceptScheme,
     String userAgent,
     bool withZoom,
     bool displayZoomControls,
@@ -175,7 +189,8 @@ class FlutterWebviewPlugin {
       'clearCache': clearCache ?? false,
       'hidden': hidden ?? false,
       'clearCookies': clearCookies ?? false,
-      'mediaPlaybackRequiresUserGesture': mediaPlaybackRequiresUserGesture ?? true,
+      'mediaPlaybackRequiresUserGesture':
+          mediaPlaybackRequiresUserGesture ?? true,
       'enableAppScheme': enableAppScheme ?? true,
       'userAgent': userAgent,
       'withZoom': withZoom ?? false,
@@ -194,6 +209,10 @@ class FlutterWebviewPlugin {
       'debuggingEnabled': debuggingEnabled ?? false,
       'ignoreSSLErrors': ignoreSSLErrors ?? false,
     };
+
+    if (interceptScheme != null) {
+      args['interceptScheme'] = interceptScheme;
+    }
 
     if (headers != null) {
       args['headers'] = headers;
@@ -248,7 +267,8 @@ class FlutterWebviewPlugin {
   Future<bool> canGoBack() async => await _channel.invokeMethod('canGoBack');
 
   /// Checks if webview can navigate back
-  Future<bool> canGoForward() async => await _channel.invokeMethod('canGoForward');
+  Future<bool> canGoForward() async =>
+      await _channel.invokeMethod('canGoForward');
 
   /// Navigates forward on the Webview.
   Future<Null> goForward() async => await _channel.invokeMethod('forward');
@@ -274,7 +294,8 @@ class FlutterWebviewPlugin {
   // Clean cookies on WebView
   Future<Null> cleanCookies() async {
     // one liner to clear javascript cookies
-    await evalJavascript('document.cookie.split(";").forEach(function(c) { document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); });');
+    await evalJavascript(
+        'document.cookie.split(";").forEach(function(c) { document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); });');
     return await _channel.invokeMethod('cleanCookies');
   }
 
